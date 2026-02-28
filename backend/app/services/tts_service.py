@@ -1,8 +1,9 @@
 import os
 from typing import List, Dict
-
 import requests
 from dotenv import load_dotenv
+
+from .scene_service import detect_scene_mood
 
 load_dotenv()
 
@@ -13,7 +14,7 @@ ELEVENLABS_OUTPUT_FORMAT = os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128"
 
 
 # ==========================================================
-# 🎭 SMART EMOTION DETECTION
+# 🎭 Sentence-Level Emotion Detection
 # ==========================================================
 
 def _detect_emotion(text: str) -> str:
@@ -41,46 +42,71 @@ def _detect_emotion(text: str) -> str:
 
 
 # ==========================================================
-# 🎛 VOICE PARAMETER TUNING
+# 🎛 Hierarchical Voice Modulation
 # ==========================================================
 
-def _get_voice_settings(emotion: str):
+def _get_voice_settings(emotion: str, scene_mood: str):
 
-    # Default baseline
-    stability = 0.50
+    # 🎛 Base values
+    stability = 0.5
     similarity = 0.85
-    style = 0.30
-    speed = 1.00
+    style = 0.3
+    speed = 1.0
 
-    if emotion == "angry":
-        stability = 0.18
-        style = 0.85
-        speed = 1.08
+    # 🌌 Scene-level baseline
+    if scene_mood == "tense":
+        stability += 0.1
+        style += 0.35
+        speed -= 0.18
 
-    elif emotion == "sad":
-        stability = 0.75
-        style = 0.20
-        speed = 0.90
+    elif scene_mood == "dramatic":
+        stability += 0.1
+        style += 0.4
+        speed -= 0.22
 
-    elif emotion == "happy":
-        stability = 0.30
-        style = 0.65
-        speed = 1.05
+    elif scene_mood == "happy":
+        speed += 0.06
+        style += 0.1
 
-    elif emotion == "excited":
-        stability = 0.22
-        style = 0.90
-        speed = 1.10
+    elif scene_mood == "sad":
+        stability += 0.2
+        speed -= 0.12
+
+    elif scene_mood == "romantic":
+        speed -= 0.08
+        style += 0.15
+
+    elif scene_mood == "mysterious":
+        stability += 0.15
+        speed -= 0.15
+
+    # 🔥 Sentence-level override (stronger than scene)
+    if emotion == "excited":
+        speed += 0.25
+        style += 0.25
 
     elif emotion == "whisper":
-        stability = 0.65
-        style = 0.10
-        speed = 0.92
+        speed -= 0.25
+        style -= 0.1
+        stability += 0.1
+
+    elif emotion == "angry":
+        style += 0.3
+        stability -= 0.2
+        speed += 0.1
+
+    elif emotion == "sad":
+        speed -= 0.15
+        stability += 0.15
 
     elif emotion == "question":
-        stability = 0.45
-        style = 0.40
-        speed = 1.02
+        style += 0.1
+        speed += 0.05
+
+    # Clamp values to safe limits
+    stability = max(0.1, min(1.0, stability))
+    style = max(0.0, min(1.0, style))
+    speed = max(0.7, min(1.2, speed))
 
     return {
         "stability": stability,
@@ -90,16 +116,9 @@ def _get_voice_settings(emotion: str):
         "use_speaker_boost": True,
     }
 
+# ElevenLabs API Call
 
-# ==========================================================
-# 🔊 TTS CALL
-# ==========================================================
-
-def _synthesize_text(
-    text: str,
-    voice_id: str,
-    emotion: str,
-) -> bytes:
+def _synthesize_text(text: str, voice_id: str, emotion: str, scene_mood: str) -> bytes:
 
     if not ELEVENLABS_API_KEY:
         raise RuntimeError("ELEVENLABS_API_KEY environment variable is not set.")
@@ -112,7 +131,7 @@ def _synthesize_text(
     payload = {
         "text": text,
         "model_id": ELEVENLABS_MODEL_ID,
-        "voice_settings": _get_voice_settings(emotion),
+        "voice_settings": _get_voice_settings(emotion, scene_mood),
     }
 
     url = ELEVENLABS_TTS_URL.format(voice_id=voice_id) + f"?output_format={ELEVENLABS_OUTPUT_FORMAT}"
@@ -126,7 +145,7 @@ def _synthesize_text(
 
 
 # ==========================================================
-# 🎬 MAIN AUDIO GENERATOR
+# 🎬 Main Audio Generator
 # ==========================================================
 
 def generate_narration_audio(
@@ -136,6 +155,10 @@ def generate_narration_audio(
 ) -> None:
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    # 🌌 Scene Mood Detection
+    full_text = " ".join([seg["text"] for seg in segments])
+    scene_mood = detect_scene_mood(full_text)
 
     with open(output_path, "wb") as out_f:
 
@@ -152,16 +175,26 @@ def generate_narration_audio(
             if not voice_id:
                 raise RuntimeError(f"No voice mapping found for speaker '{speaker}'.")
 
-            # 🔥 Automatic emotion detection
             emotion = _detect_emotion(text)
 
             audio_bytes = _synthesize_text(
                 text=text,
                 voice_id=voice_id,
                 emotion=emotion,
+                scene_mood=scene_mood,
             )
 
             out_f.write(audio_bytes)
 
-            # 🎬 Cinematic micro pause (~200ms feel)
-            out_f.write(b"\x00" * 6000)
+            # 🎬 Cinematic micro pause
+            pause_length = 6000
+
+
+            if scene_mood == "tense":
+                pause_length = 12000
+            elif scene_mood == "happy":
+                pause_length = 4000
+            elif scene_mood == "sad":
+                pause_length = 9000
+
+            out_f.write(b"\x00" * pause_length)
