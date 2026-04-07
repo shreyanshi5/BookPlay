@@ -7,6 +7,7 @@ SCENE_KEYWORDS = {
     "sad": ["cry", "tears", "lonely", "grief", "funeral", "lost"],
     "romantic": ["love", "heart", "kiss", "embrace", "passion"],
     "mysterious": ["unknown", "strange", "whisper", "fog", "silence"],
+    "dramatic": ["roared", "echoed", "suddenly", "explosion", "crash"]
 }
 
 

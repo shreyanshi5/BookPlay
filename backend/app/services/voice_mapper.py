@@ -15,10 +15,7 @@ ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
 # Cache voices
 _VOICE_POOL: List[Dict[str, str]] = []  # {"id": voice_id, "gender": "male|female|neutral"}
 
-
-# ==========================================================
-# 🔁 FETCH ONLY API-ALLOWED VOICES (FREE SAFE)
-# ==========================================================
+# FETCH ONLY API-ALLOWED VOICES (FREE SAFE)
 
 def _fetch_voice_pool() -> List[Dict[str, str]]:
     global _VOICE_POOL
@@ -62,10 +59,7 @@ def _fetch_voice_pool() -> List[Dict[str, str]]:
     _VOICE_POOL = pool
     return _VOICE_POOL
 
-
-# ==========================================================
-# 👤 SIMPLE GENDER INFERENCE
-# ==========================================================
+# SIMPLE GENDER INFERENCE
 
 def _infer_gender(name: str) -> str:
     if not name:
@@ -87,10 +81,7 @@ def _infer_gender(name: str) -> str:
 
     return "male"
 
-
-# ==========================================================
-# 🎤 MAIN VOICE MAPPING (FREE SAFE)
-# ==========================================================
+#  MAIN VOICE MAPPING (FREE SAFE)
 
 def ensure_voice_mapping(conn: sqlite3.Connection, speakers: Iterable[str]) -> Dict[str, str]:
 

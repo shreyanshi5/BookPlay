@@ -13,10 +13,7 @@ ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
 ELEVENLABS_OUTPUT_FORMAT = os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")
 
 
-# ==========================================================
-# 🎭 Sentence-Level Emotion Detection
-# ==========================================================
-
+# Sentence-Level Emotion Detection
 def _detect_emotion(text: str) -> str:
     lower = text.lower().strip()
 
@@ -40,47 +37,43 @@ def _detect_emotion(text: str) -> str:
 
     return "neutral"
 
-
-# ==========================================================
-# 🎛 Hierarchical Voice Modulation
-# ==========================================================
+# Hierarchical Voice Modulation
 
 def _get_voice_settings(emotion: str, scene_mood: str):
 
-    # 🎛 Base values
     stability = 0.5
     similarity = 0.85
     style = 0.3
     speed = 1.0
 
-    # 🌌 Scene-level baseline
+    # Scene-level baseline
     if scene_mood == "tense":
-        stability += 0.1
+        stability += 0.15
         style += 0.35
-        speed -= 0.18
+        speed -= 0.20
 
     elif scene_mood == "dramatic":
-        stability += 0.1
-        style += 0.4
-        speed -= 0.22
+        stability += 0.15
+        style += 0.45
+        speed -= 0.25
 
     elif scene_mood == "happy":
-        speed += 0.06
-        style += 0.1
+        speed += 0.08
+        style += 0.12
 
     elif scene_mood == "sad":
-        stability += 0.2
-        speed -= 0.12
+        stability += 0.25
+        speed -= 0.18
 
     elif scene_mood == "romantic":
-        speed -= 0.08
-        style += 0.15
+        speed -= 0.10
+        style += 0.18
 
     elif scene_mood == "mysterious":
-        stability += 0.15
-        speed -= 0.15
+        stability += 0.20
+        speed -= 0.18
 
-    # 🔥 Sentence-level override (stronger than scene)
+    # Sentence-level override
     if emotion == "excited":
         speed += 0.25
         style += 0.25
@@ -103,7 +96,7 @@ def _get_voice_settings(emotion: str, scene_mood: str):
         style += 0.1
         speed += 0.05
 
-    # Clamp values to safe limits
+    # ElevenLabs safe limits
     stability = max(0.1, min(1.0, stability))
     style = max(0.0, min(1.0, style))
     speed = max(0.7, min(1.2, speed))
@@ -115,6 +108,7 @@ def _get_voice_settings(emotion: str, scene_mood: str):
         "speed": speed,
         "use_speaker_boost": True,
     }
+
 
 # ElevenLabs API Call
 
@@ -136,17 +130,22 @@ def _synthesize_text(text: str, voice_id: str, emotion: str, scene_mood: str) ->
 
     url = ELEVENLABS_TTS_URL.format(voice_id=voice_id) + f"?output_format={ELEVENLABS_OUTPUT_FORMAT}"
 
+    print("Calling ElevenLabs...")
+    print("Text length:", len(text))
+
     response = requests.post(url, json=payload, headers=headers)
 
+    print("Status Code:", response.status_code)
+    print("Returned Bytes:", len(response.content))
+
     if response.status_code != 200:
+        print("Error Response:", response.text)
         raise RuntimeError(f"ElevenLabs API error {response.status_code}: {response.text}")
 
     return response.content
 
 
-# ==========================================================
-# 🎬 Main Audio Generator
-# ==========================================================
+# Main Scene-Based Audio Generator
 
 def generate_narration_audio(
     segments: List[Dict[str, str]],
@@ -156,7 +155,7 @@ def generate_narration_audio(
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # 🌌 Scene Mood Detection
+    # Detect Scene Mood Once Per Scene
     full_text = " ".join([seg["text"] for seg in segments])
     scene_mood = detect_scene_mood(full_text)
 
@@ -186,15 +185,16 @@ def generate_narration_audio(
 
             out_f.write(audio_bytes)
 
-            # 🎬 Cinematic micro pause
-            pause_length = 6000
+            # Cinematic Pause Control
+            pause_length = 6000  # default micro pause
 
-
-            if scene_mood == "tense":
-                pause_length = 12000
+            if scene_mood in ["tense", "dramatic"]:
+                pause_length = 14000
             elif scene_mood == "happy":
                 pause_length = 4000
             elif scene_mood == "sad":
-                pause_length = 9000
+                pause_length = 10000
+            elif scene_mood == "mysterious":
+                pause_length = 12000
 
             out_f.write(b"\x00" * pause_length)

@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from typing import Optional
 import os
 import uuid
-
+from ..services.scene_splitter import split_into_scenes
 from ..models.schemas import UploadResponse, AudioResponse
 from ..services import pdf_service, nlp_service, tts_service, voice_mapper
 from ..database.db import get_db, init_db
@@ -34,29 +34,27 @@ async def upload_content(
     text: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
 ):
-    """
-    Accept raw text or a PDF file, process it, generate multi-voice narration,
-    and return an identifier and audio URL.
-    """
     if not text and not file:
         raise HTTPException(status_code=400, detail="Either text or PDF file must be provided.")
 
-    # Persist uploaded file if provided
     db = get_db()
     filename = None
     file_id = str(uuid.uuid4())
 
+    # ---------------------------------------------------
+    # Handle Input
+    # ---------------------------------------------------
     if file:
         if not file.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
         filename = f"{file_id}_{file.filename}"
         file_path = os.path.join(UPLOAD_DIR, filename)
+
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
 
-        # Extract text from PDF
         extracted_text = pdf_service.extract_text_from_pdf(file_path)
     else:
         extracted_text = text or ""
@@ -65,52 +63,64 @@ async def upload_content(
     if not extracted_text.strip():
         raise HTTPException(status_code=400, detail="No extractable text found.")
 
-    # Clean and split text into dialogue segments
+    # ---------------------------------------------------
+    # 🎬 Scene Splitting
+    # ---------------------------------------------------
     cleaned_text = nlp_service.clean_text(extracted_text)
-    segments = nlp_service.extract_dialogue_segments(cleaned_text)
+    scenes = split_into_scenes(cleaned_text)
 
-    if not segments:
-        # Fallback: treat the whole text as narrator if no dialogue detected
-        segments = [{"speaker": "narrator", "text": cleaned_text}]
+    scene_outputs = []
 
-    # Ensure voices are mapped for all speakers
-    voice_mapping = voice_mapper.ensure_voice_mapping(db, [s["speaker"] for s in segments])
+    # ---------------------------------------------------
+    # 🎤 Process Each Scene Separately
+    # ---------------------------------------------------
+    for scene_index, scene_text in enumerate(scenes, start=1):
 
-    # Generate final audio file path
-    output_id = str(uuid.uuid4())
-    output_filename = f"{output_id}.mp3"
-    output_path = os.path.join(OUTPUT_DIR, output_filename)
+        scene_segments = nlp_service.extract_dialogue_segments(scene_text)
 
-    # Generate and merge audio segments
-    tts_service.generate_narration_audio(
-        segments=segments,
-        voice_mapping=voice_mapping,
-        output_path=output_path,
-    )
+        if not scene_segments:
+            scene_segments = [{"speaker": "narrator", "text": scene_text}]
 
-    # Record in database
+        # Ensure voices mapped per scene
+        voice_mapping = voice_mapper.ensure_voice_mapping(
+            db, [s["speaker"] for s in scene_segments]
+        )
+
+        # Generate scene audio file
+        scene_output_id = str(uuid.uuid4())
+        scene_filename = f"{scene_output_id}.mp3"
+        scene_output_path = os.path.join(OUTPUT_DIR, scene_filename)
+
+        tts_service.generate_narration_audio(
+            segments=scene_segments,
+            voice_mapping=voice_mapping,
+            output_path=scene_output_path,
+        )
+
+        # Save output record
+        db.execute(
+            "INSERT INTO outputs (id, file_id, audio_path) VALUES (?, ?, ?)",
+            (scene_output_id, file_id, scene_output_path),
+        )
+
+        scene_outputs.append({
+            "scene_number": scene_index,
+            "text": scene_text,
+            "audio_url": f"/api/audio/{scene_output_id}"
+        })
+
+    # Save file record
     db.execute(
-        """
-        INSERT INTO files (id, filename)
-        VALUES (?, ?)
-        """,
+        "INSERT INTO files (id, filename) VALUES (?, ?)",
         (file_id, filename),
     )
 
-    db.execute(
-        """
-        INSERT INTO outputs (id, file_id, audio_path)
-        VALUES (?, ?, ?)
-        """,
-        (output_id, file_id, output_path),
-    )
     db.commit()
-
     return UploadResponse(
-        id=output_id,
-        audio_url=f"/api/audio/{output_id}",
+        id=file_id,
+        scenes=scene_outputs,
+        scene_count=len(scene_outputs)
     )
-
 
 @router.get("/audio/{output_id}", response_model=AudioResponse)
 async def get_audio(output_id: str):

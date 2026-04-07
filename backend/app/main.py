@@ -68,11 +68,11 @@ async def index():
                 <label for="text">Text (optional)</label>
                 <textarea id="text" name="text" placeholder='"Hello," said John. "Hi," replied Mary.'></textarea>
 
-                <label for="file">PDF file (optional)</label>
+                <label for="file">PDF file</label>
                 <input id="file" name="file" type="file" accept="application/pdf" />
-                <div class="note">You can use either text, a PDF, or both. If both are provided, they are combined.</div>
+                <div class="note">You can use either text, a PDF, or both.</div>
 
-                <button id="submitBtn" type="submit">Generate Audio</button>
+                <button id="submitBtn" type="button">Generate Audio</button>
             </form>
             <div id="result" class="result" style="display:none;">
                 <div id="resultMessage"></div>
@@ -82,21 +82,13 @@ async def index():
         </div>
 
         <script>
-            const form = document.getElementById("uploadForm");
-            const resultDiv = document.getElementById("result");
-            const resultMessage = document.getElementById("resultMessage");
-            const audioPlayer = document.getElementById("audioPlayer");
-            const downloadLink = document.getElementById("downloadLink");
             const submitBtn = document.getElementById("submitBtn");
+            const resultDiv = document.getElementById("result");
 
-            form.addEventListener("submit", async (e) => {
-                e.preventDefault();
+            submitBtn.addEventListener("click", async () => {
+
+                resultDiv.innerHTML = "";
                 resultDiv.style.display = "none";
-                resultMessage.textContent = "";
-                audioPlayer.style.display = "none";
-                audioPlayer.removeAttribute("src");
-                downloadLink.style.display = "none";
-                downloadLink.innerHTML = "";
                 submitBtn.disabled = true;
                 submitBtn.textContent = "Generating...";
 
@@ -108,6 +100,7 @@ async def index():
                     if (textVal.trim()) {
                         formData.append("text", textVal);
                     }
+
                     if (fileInput.files.length > 0) {
                         formData.append("file", fileInput.files[0]);
                     }
@@ -130,30 +123,44 @@ async def index():
                     }
 
                     const data = await resp.json();
-                    const audioUrl = data.audio_url.startsWith("http")
-                        ? data.audio_url
-                        : `/api/audio/${data.id}`;
 
-                    // Primary: inline audio player with autoplay
-                    audioPlayer.src = audioUrl;
-                    audioPlayer.style.display = "block";
-                    audioPlayer.load();
-                    audioPlayer.play().catch(() => {
-                        // Autoplay might be blocked; user can press play manually
+                    // -----------------------------
+                    // 🎬 Render Scene Audio Players
+                    // -----------------------------
+
+                    resultDiv.style.display = "block";
+
+                    const header = document.createElement("h2");
+                    header.textContent = "Generated Scenes";
+                    resultDiv.appendChild(header);
+
+                    data.scenes.forEach(scene => {
+
+                        const container = document.createElement("div");
+                        container.style.marginTop = "20px";
+                        container.style.padding = "15px";
+                        container.style.border = "1px solid #1f2937";
+                        container.style.borderRadius = "10px";
+                        container.style.background = "#0f172a";
+
+                        const title = document.createElement("h3");
+                        title.textContent = `Scene ${scene.scene_number}`;
+
+                        const audio = document.createElement("audio");
+                        audio.controls = true;
+                        audio.src = scene.audio_url;
+                        audio.style.marginTop = "10px";
+                        audio.style.width = "100%";
+
+                        container.appendChild(title);
+                        container.appendChild(audio);
+
+                        resultDiv.appendChild(container);
                     });
 
-                    // Secondary: download link
-                    downloadLink.innerHTML = `
-                        <a href="${audioUrl}" download>Download audio file</a>
-                    `;
-                    downloadLink.style.display = "block";
-
-                    resultMessage.innerHTML = "<strong>Done!</strong> Your audio is ready.";
-                    resultDiv.style.display = "block";
                 } catch (err) {
-                    console.error(err);
-                    resultDiv.textContent = "Error: " + err.message;
                     resultDiv.style.display = "block";
+                    resultDiv.innerHTML = "<strong>Error:</strong> " + err.message;
                 } finally {
                     submitBtn.disabled = false;
                     submitBtn.textContent = "Generate Audio";

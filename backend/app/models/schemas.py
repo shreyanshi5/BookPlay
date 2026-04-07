@@ -1,14 +1,15 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
+class SceneResponse(BaseModel):
+    scene_number: int
+    text: str
+    audio_url: str
 
 class UploadResponse(BaseModel):
-    """
-    Response returned after processing an upload request.
-    """
-
     id: str
-    audio_url: str
+    scenes: List[SceneResponse]
+    scene_count: int
 
 
 class AudioResponse(BaseModel):

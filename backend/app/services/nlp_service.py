@@ -3,19 +3,12 @@ from typing import List, Dict
 
 import spacy
 
-# Load a small English model.
-# Make sure to install it with:
-#   python -m spacy download en_core_web_sm
 _NLP = spacy.load("en_core_web_sm")
 
 
 def clean_text(text: str) -> str:
-    """
-    Basic text cleanup: normalize whitespace and remove extra symbols.
-    """
-    # Replace fancy quotes with standard quotes
+   
     text = text.replace("“", '"').replace("”", '"').replace("’", "'")
-    # Normalize whitespace
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
@@ -23,13 +16,6 @@ def clean_text(text: str) -> str:
 def extract_dialogue_segments(text: str) -> List[Dict[str, str]]:
     """
     Detect dialogue segments using quotation marks and attempt to identify speakers.
-
-    Example handled pattern:
-        "Hello," said John.
-    Heuristic:
-        - Dialogue text is inside quotes.
-        - Speaker is the PERSON entity near verbs like 'said', 'asked', 'replied'.
-        - If no clear speaker, label as 'narrator'.
     """
     segments: List[Dict[str, str]] = []
 
@@ -83,8 +69,6 @@ def _find_speaker_name(doc: spacy.tokens.Doc) -> str:
     # Target verbs commonly used in dialogue attribution
     dialogue_verbs = {"say", "said", "reply", "replied", "ask", "asked", "shout", "shouted"}
 
-    # Simple heuristic:
-    #   If we see pattern like 'said John' or 'John said', assign 'John'
     tokens = list(doc)
     for i, token in enumerate(tokens):
         lower = token.lemma_.lower()
